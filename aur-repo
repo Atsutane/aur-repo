@@ -30,7 +30,7 @@ download() {
 	fi
 
 	if [ $DOWNLOADER -eq "wget" ]; then
-		wget -q -O .cache/${PACKAGE}.tar.gz http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz
+		wget -q -o .cache/${PACKAGE}.tar.gz http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz
 	else
 		curl http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz > .cache/${PACKAGE}.tar.gz
 	fi
@@ -45,36 +45,44 @@ diff_pkg() {
 				rm -rf *
 			else
 				mv $PACKAGE ../.build/
+				REBUILD=1
 			fi
 		else
-				mv $PACKAGE ../.build/
+			mv $PACKAGE ../.build/
+			REBUILD=1
 		fi
 	else
 		mv $PACKAGE ../.build/
+		REBUILD=1
 	fi
 
-	cd ..
+	cd $REPOPATH
 }
 
 build() {
-		if [ ! -d .build ]; then
-			mkdir .build
-		fi
-
-		diff_pkg
+	if [ ! -d .build ]; then
+		mkdir .build
+	fi
+	
+	diff_pkg
+	if [ $REBUILD = 1 ]; then
 		repo-remove $REPOPATH/${PERSREPO}.db.tar.gz $PACKAGE
 		rm -f ${PACKAGE}-*.pkg.tar.*
+
 		cd .build/${PACKAGE}
 		makepkg -f
 		if [ -f *.pkg.tar.* ]; then
-			mv *.pkg.tar.* $REPOPATH
+			mv *.pkg.tar.* $REPOPATH/
 		fi
+	fi
 
-		if [ $KEEP_DATA -eq 0 ]; then
-			rm -rf $PACKAGE 
-		fi
+	cd $REPOPATH
+}
 
-		cd ..
+get_data() {
+	# " =" to avoid misuse using the url tag.
+	pkgver=`cat .build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
+	CARCH=`cat .build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
 }
 
 show_help() {
@@ -129,16 +137,21 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
 
 	case $PACKAGE_ACTION in
 		a) download
-		KEEP_DATA=1
+		REBUILD=1
 		build
-		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-*.pkg.tar.*
+		get_data
+		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
 		;;
 		m) download
-		KEEP_DATA=0
+		REBUILD=0
 		build
-		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-*.pkg.tar.*
+		get_data
+		#rm -rf .build/${PACKAGE}
+		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
 		;;
 		*)echo "$PACKAGE will be ignored."
 		;;
 	esac
 done
+
+rm -rf .cache/*
