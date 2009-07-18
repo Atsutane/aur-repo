@@ -59,7 +59,7 @@ diff_pkg() {
 		echo "$PACKAGE is up to date."
 	else
 		install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
-		mv ${PACKAGE} ../build/${PACKAGE}
+		cp -r ${PACKAGE} ${REPOPATH}/build/
 		echo "$PACKAGE will be updated."
 	fi
 
