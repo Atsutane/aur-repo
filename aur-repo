@@ -7,55 +7,58 @@
 # 		Tried to write it to be compatible with autoaur.
 
 # Options:
-
-DOWNLOADER=""
+REBUILD=0
+LOCALVER=0
+LOCALREL=1
+AURVER=0
+AURREL=1
 
 # Functions
-check_downloader() {
-#	if [ -x "/usr/bin/wget" ]; then
-#		DOWNLOADER=wget
-#	elif
-	if [ -x "/usr/bin/curl" ]; then
-		DOWNLOADER=curl
-	else
-	#	echo "Neither wget nor curl found."
+download() {
+	if [ ! -x "/usr/bin/curl" ]; then
 		echo "Could not find curl."
 		exit 1
 	fi
-}
-
-download() {
-	check_downloader
 
 	if [ ! -d ".cache" ]; then
 			mkdir .cache
 	fi
 
-#	if [ $DOWNLOADER == wget ]; then
-#		wget -o .cache/${PACKAGE}.tar.gz http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz
-#	else
-		curl http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz > .cache/${PACKAGE}.tar.gz
-#	fi
+	curl http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz > .cache/${PACKAGE}.tar.gz
 }
 
 diff_pkg() {
-	cd .cache
+	cd ${REPOPATH}/.cache
 	tar -xf ${PACKAGE}.tar.gz
-	if [ -f ../build/${PACKAGE}/PKGBUILD ]; then
-		if [ `cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` -lt `cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` ]; then
-			if  [ `cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` -lt `cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` ]; then
-				rm -rf *
+
+	if [ -f ../build/${PACKAGE}/PKGBUILD && $REBUILD -eq 0 ]; then
+		LOCALVER=`cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
+		AURVER=`cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
+		if [ $AURVER -lt $LOCALVER ]; then
+			REBUILD=0
+		elif [ $AURVER -eq $LOCALVER ]; then
+			LOCALREL=`cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
+			AURREL=`cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
+			if  [ $AURREL -lt $LOCALREL ]; then
+				REBUILD=0
+			elif [ $AURREL -eq $LOCALREL ]; then		
+				REBUILD=0
 			else
-				mv $PACKAGE ../build/
 				REBUILD=1
 			fi
 		else
-			mv $PACKAGE ../build/
 			REBUILD=1
 		fi
 	else
-		mv $PACKAGE ../build/
 		REBUILD=1
+	fi
+
+	if [ $REBUILD -eq 0 ]; then
+		echo "$PACKAGE is up to date."
+	else
+		install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
+		mv ${PACKAGE} ../build/${PACKAGE}
+		echo "$PACKAGE will be updated."
 	fi
 
 	cd $REPOPATH
@@ -65,6 +68,7 @@ build() {
 	if [ ! -d build ]; then
 		mkdir build
 	fi
+	
 	
 	diff_pkg
 	if [ $REBUILD = 1 ]; then
@@ -140,15 +144,17 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
 		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
 		;;
 		m) download
-		REBUILD=0
 		build
-		get_data
-		rm -rf build/${PACKAGE}/{src,pkg}
-		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+		if [ $REBUILD -eq 1 ]; then
+			get_data
+			rm -rf build/${PACKAGE}/{src,pkg}
+			repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+		fi
 		;;
 		*)echo "$PACKAGE will be ignored."
 		;;
 	esac
+	REBUILD=0
 done
 
 rm -rf .cache/*
