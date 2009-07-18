@@ -12,12 +12,14 @@ DOWNLOADER=""
 
 # Functions
 check_downloader() {
-	if [ -x "/usr/bin/wget" ]; then
-		DOWNLOADER=wget
-	elif [ -x "/usr/bin/curl" ]; then
+#	if [ -x "/usr/bin/wget" ]; then
+#		DOWNLOADER=wget
+#	elif
+	if [ -x "/usr/bin/curl" ]; then
 		DOWNLOADER=curl
 	else
-		echo "Neither wget nor curl found."
+	#	echo "Neither wget nor curl found."
+		echo "Could not find curl."
 		exit 1
 	fi
 }
@@ -29,30 +31,30 @@ download() {
 			mkdir .cache
 	fi
 
-	if [ $DOWNLOADER -eq "wget" ]; then
-		wget -q -o .cache/${PACKAGE}.tar.gz http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz
-	else
+#	if [ $DOWNLOADER == wget ]; then
+#		wget -o .cache/${PACKAGE}.tar.gz http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz
+#	else
 		curl http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz > .cache/${PACKAGE}.tar.gz
-	fi
+#	fi
 }
 
 diff_pkg() {
 	cd .cache
 	tar -xf ${PACKAGE}.tar.gz
-	if [ -f ../.build/${PACKAGE}/PKGBUILD ]; then
-		if [ `cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` < `cat ../.build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` ]; then
-			if  [ `cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` < `cat ../.build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` ]; then
+	if [ -f ../build/${PACKAGE}/PKGBUILD ]; then
+		if [ `cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`  `cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` ]; then
+			if  [ `cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` < `cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` ]; then
 				rm -rf *
 			else
-				mv $PACKAGE ../.build/
+				mv $PACKAGE ../build/
 				REBUILD=1
 			fi
 		else
-			mv $PACKAGE ../.build/
+			mv $PACKAGE ../build/
 			REBUILD=1
 		fi
 	else
-		mv $PACKAGE ../.build/
+		mv $PACKAGE ../build/
 		REBUILD=1
 	fi
 
@@ -60,8 +62,8 @@ diff_pkg() {
 }
 
 build() {
-	if [ ! -d .build ]; then
-		mkdir .build
+	if [ ! -d build ]; then
+		mkdir build
 	fi
 	
 	diff_pkg
@@ -69,7 +71,7 @@ build() {
 		repo-remove $REPOPATH/${PERSREPO}.db.tar.gz $PACKAGE
 		rm -f ${PACKAGE}-*.pkg.tar.*
 
-		cd .build/${PACKAGE}
+		cd build/${PACKAGE}
 		makepkg -f
 		if [ -f *.pkg.tar.* ]; then
 			mv *.pkg.tar.* $REPOPATH/
@@ -81,8 +83,8 @@ build() {
 
 get_data() {
 	# " =" to avoid misuse using the url tag.
-	pkgver=`cat .build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
-	CARCH=`cat .build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
+	pkgver=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
+	CARCH=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
 }
 
 show_help() {
@@ -105,9 +107,9 @@ Options:
 EOF
 }
 
-# Check given path
-if [ ! -d $1 ]; then
-	echo "The given path does not exist"
+# Check given path and show help
+if [ ! -f "${1}/repo.conf" ]; then
+	show_help
 	exit 1
 fi
 
@@ -117,12 +119,7 @@ if [ $? = 1 ]; then
 	exit 1
 fi
 
-# Check configuration
-if [ ! -f "repo.conf" ]; then
-	echo "repo.conf does not exist."
-	exit 1
-fi
-
+# Include the configuration
 source repo.conf
 
 if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
@@ -146,7 +143,7 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
 		REBUILD=0
 		build
 		get_data
-		#rm -rf .build/${PACKAGE}
+		rm -rf build/${PACKAGE}/{src,pkg}
 		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
 		;;
 		*)echo "$PACKAGE will be ignored."
