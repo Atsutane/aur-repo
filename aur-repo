@@ -31,7 +31,9 @@ diff_pkg() {
 	cd ${REPOPATH}/.cache
 	tar -xf ${PACKAGE}.tar.gz
 
-	if [ -f ../build/${PACKAGE}/PKGBUILD && $REBUILD -eq 0 ]; then
+	if [ $REBUILD -eq 1 ]; then
+		rm ${REPOPATH}/build/${PACKAGE}/PKGBUILD
+	elif [ -f ../build/${PACKAGE}/PKGBUILD ]; then
 		LOCALVER=`cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
 		AURVER=`cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
 		if [ $AURVER -lt $LOCALVER ]; then
