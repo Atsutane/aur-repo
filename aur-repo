@@ -42,8 +42,8 @@ diff_pkg() {
 	cd .cache
 	tar -xf ${PACKAGE}.tar.gz
 	if [ -f ../build/${PACKAGE}/PKGBUILD ]; then
-		if [ `cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`  `cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` ]; then
-			if  [ `cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` < `cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` ]; then
+		if [ `cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` -lt `cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2` ]; then
+			if  [ `cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` -lt `cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2` ]; then
 				rm -rf *
 			else
 				mv $PACKAGE ../build/
