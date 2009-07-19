@@ -33,51 +33,48 @@ diff_pkg() {
 
 	if [ $REBUILD -eq 1 ]; then
 		rm ${REPOPATH}/build/${PACKAGE}/PKGBUILD
-	elif [ -f ../build/${PACKAGE}/PKGBUILD ]; then
-		LOCALVER=`cat ../build/$PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
-		AURVER=`cat $PACKAGE/PKGBUILD|grep pkgver|cut -d "=" -f 2`
-		if [ $AURVER -lt $LOCALVER ]; then
-			REBUILD=0
-		elif [ $AURVER -eq $LOCALVER ]; then
-			LOCALREL=`cat ../build/$PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
-			AURREL=`cat $PACKAGE/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
-			if  [ $AURREL -lt $LOCALREL ]; then
-				REBUILD=0
-			elif [ $AURREL -eq $LOCALREL ]; then		
-				REBUILD=0
-			else
-				REBUILD=1
-			fi
-		else
+	elif [ -f ${REPOPATH}/build/${PACKAGE}/PKGBUILD ]; then
+		LOCALVER=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgver|cut -d "=" -f 2`
+		AURVER=`cat ${PACKAGE}/PKGBUILD|grep pkgver|cut -d "=" -f 2`
+		if [ $AURVER -gt $LOCALVER ]; then
 			REBUILD=1
+		else
+			LOCALREL=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
+			AURREL=`cat ${PACKAGE}/PKGBUILD|grep pkgrel|cut -d "=" -f 2`
+			if  [ $AURREL -gt $LOCALREL ]; then
+				REBUILD=1
+			else
+				REBUILD=0
+			fi
 		fi
 	else
 		REBUILD=1
 	fi
 
+	# Put into log
 	if [ $REBUILD -eq 0 ]; then
-		echo "$PACKAGE is up to date."
+		echo "`date +%Y%m%d`: $PACKAGE is up to date." >> ${REPOPATH}/${PERSREPO}.log
 	else
 		install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
 		cp -r ${PACKAGE} ${REPOPATH}/build/
-		echo "$PACKAGE will be updated."
+		echo "`date +%Y%m%d`: $PACKAGE will be updated. ($LOCALVER-$LOCALREL -> $AURVER-$AURREL)" >> ${REPOPATH}/${PERSREPO}.log
 	fi
 
 	cd $REPOPATH
 }
 
 build() {
-	if [ ! -d build ]; then
-		mkdir build
+	if [ ! -d ${REPOPATH}/build ]; then
+		mkdir ${REPOPATH}/build
 	fi
 	
 	
 	diff_pkg
-	if [ $REBUILD = 1 ]; then
-		repo-remove $REPOPATH/${PERSREPO}.db.tar.gz $PACKAGE
+	if [ $REBUILD -eq 1 ]; then
+		repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz $PACKAGE
 		rm -f ${PACKAGE}-*.pkg.tar.*
 
-		cd build/${PACKAGE}
+		cd ${REPOPATH}/build/${PACKAGE}
 		makepkg -f
 		if [ -f *.pkg.tar.* ]; then
 			mv *.pkg.tar.* $REPOPATH/
@@ -121,7 +118,7 @@ fi
 
 REPOPATH=$1
 cd $REPOPATH
-if [ $? = 1 ]; then
+if [ $? -eq 1 ]; then
 	exit 1
 fi
 
@@ -137,6 +134,7 @@ fi
 for ITEM in "${GET_FROM_AUR[@]}"; do
 	PACKAGE=$(echo $ITEM | cut -d "=" -f 1)
 	PACKAGE_ACTION=$(echo $ITEM | cut -d "=" -f 2)
+	REBUILD=0
 
 	case $PACKAGE_ACTION in
 		a) download
@@ -156,7 +154,6 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
 		*)echo "$PACKAGE will be ignored."
 		;;
 	esac
-	REBUILD=0
 done
 
 rm -rf .cache/*
