@@ -53,7 +53,7 @@ diff_pkg() {
 
 	# Put into log
 	if [ $REBUILD -eq 0 ]; then
-		echo "`date +%Y%m%d`: $PACKAGE is up to date." >> ${REPOPATH}/${PERSREPO}.log
+		echo "`date +%Y%m%d`: $PACKAGE is up to date. (Local: $LOCALVER-$LOCALREL AUR: $AURVER-$AURREL)" >> ${REPOPATH}/${PERSREPO}.log
 	else
 		install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
 		cp -r ${PACKAGE} ${REPOPATH}/build/
