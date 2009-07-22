@@ -34,13 +34,13 @@ diff_pkg() {
 	if [ $REBUILD -eq 1 ]; then
 		rm ${REPOPATH}/build/${PACKAGE}/PKGBUILD
 	elif [ -f ${REPOPATH}/build/${PACKAGE}/PKGBUILD ]; then
-		LOCALVER=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgver=|cut -d "=" -f 2`
-		AURVER=`cat ${PACKAGE}/PKGBUILD|grep pkgver=|cut -d "=" -f 2`
+		LOCALVER=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep ^pkgver=|cut -d "=" -f 2`
+		AURVER=`cat ${PACKAGE}/PKGBUILD|grep ^pkgver=|cut -d "=" -f 2`
 		if [ $AURVER -gt $LOCALVER ]; then
 			REBUILD=1
 		else
-			LOCALREL=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgrel=|cut -d "=" -f 2`
-			AURREL=`cat ${PACKAGE}/PKGBUILD|grep pkgrel=|cut -d "=" -f 2`
+			LOCALREL=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep ^pkgrel=|cut -d "=" -f 2`
+			AURREL=`cat ${PACKAGE}/PKGBUILD|grep ^pkgrel=|cut -d "=" -f 2`
 			if  [ $AURREL -gt $LOCALREL ]; then
 				REBUILD=1
 			else
