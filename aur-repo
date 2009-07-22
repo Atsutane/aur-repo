@@ -7,68 +7,87 @@
 # 		Tried to write it to be compatible with autoaur.
 
 # Options:
+AURURL="http://aur.archlinux.org/packages"
 REBUILD=0
 LOCALVER=0
 LOCALREL=1
 AURVER=0
 AURREL=1
+DOWNLOADER="wget" # or "curl"
+
+log() {
+    echo $@
+    echo "`date +%Y%m%d`: $@" >> ${REPOPATH}/${PERSREPO}.log
+}
+
+exp_path() {
+    echo "`cd $1; pwd`";
+}
 
 # Functions
 download() {
-	if [ ! -x "/usr/bin/curl" ]; then
-		echo "Could not find curl."
-		exit 1
-	fi
+    if [ "$DOWNLOADER" = "wget" ]; then
+        wget -q "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" -O ".cache/${PACKAGE}.tar.gz"
+    elif [ "$DOWNLOADER" = "curl" ]; then
+        curl "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > ".cache/${PACKAGE}.tar.gz"
+    else
+        echo "no download program specified"
+        exit 1
+    fi
+    if [ $? -ne 0 ]; then
+        log "Can't download '${PACKAGE}.tar.gz'. Skipping this package..."
+    fi
+}
 
-	if [ ! -d ".cache" ]; then
-			mkdir .cache
-	fi
+get_pkgver() {
+    grep pkgver= "$1" | cut -d'=' -f2
+}
 
-	curl http://aur.archlinux.org/packages/${PACKAGE}/${PACKAGE}.tar.gz > .cache/${PACKAGE}.tar.gz
+get_pkgrel() {
+    grep pkgrel= "$1" | cut -d'=' -f2
 }
 
 diff_pkg() {
-	cd ${REPOPATH}/.cache
-	tar -xf ${PACKAGE}.tar.gz
+    cd ${REPOPATH}/.cache
+    tar -xf ${PACKAGE}.tar.gz
 
-	if [ $REBUILD -eq 1 ]; then
-		rm ${REPOPATH}/build/${PACKAGE}/PKGBUILD
-	elif [ -f ${REPOPATH}/build/${PACKAGE}/PKGBUILD ]; then
-		LOCALVER=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgver=|cut -d "=" -f 2`
-		AURVER=`cat ${PACKAGE}/PKGBUILD|grep pkgver=|cut -d "=" -f 2`
-		if [ $AURVER -gt $LOCALVER ]; then
-			REBUILD=1
-		else
-			LOCALREL=`cat ${REPOPATH}/build/${PACKAGE}/PKGBUILD|grep pkgrel=|cut -d "=" -f 2`
-			AURREL=`cat ${PACKAGE}/PKGBUILD|grep pkgrel=|cut -d "=" -f 2`
-			if  [ $AURREL -gt $LOCALREL ]; then
-				REBUILD=1
-			else
-				REBUILD=0
-			fi
-		fi
-	else
-		REBUILD=1
-	fi
+    LOCALVER=`get_pkgver ${REPOPATH}/build/${PACKAGE}/PKGBUILD`
+    AURVER=`get_pkgver ${PACKAGE}/PKGBUILD`
 
-	# Put into log
-	if [ $REBUILD -eq 0 ]; then
-		echo "`date +%Y%m%d`: $PACKAGE is up to date. (Local: $LOCALVER-$LOCALREL AUR: $AURVER-$AURREL)" >> ${REPOPATH}/${PERSREPO}.log
-	else
-		install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
-		cp -r ${PACKAGE} ${REPOPATH}/build/
-		echo "`date +%Y%m%d`: $PACKAGE will be updated. ($LOCALVER-$LOCALREL -> $AURVER-$AURREL)" >> ${REPOPATH}/${PERSREPO}.log
-	fi
+    LOCALREL=`get_pkgrel ${REPOPATH}/build/${PACKAGE}/PKGBUILD`
+    AURREL=`get_pkgrel ${PACKAGE}/PKGBUILD`
 
-	cd $REPOPATH
+    if [ $REBUILD -eq 1 ]; then
+        rm "${REPOPATH}/build/${PACKAGE}/PKGBUILD"
+    elif [ -f "${REPOPATH}/build/${PACKAGE}/PKGBUILD" ]; then
+        VERCMP=`vercmp "$AURVER" "$LOCALVER"`
+        if [ $VERCMP -gt 0 ]; then
+            REBUILD=1
+        elif [ $VERCMP -eq 0 ]; then
+            VERCMP=`vercmp "$AURREL" "$LOCALREL"`
+            if  [ $VERCMP -gt 0 ]; then
+                REBUILD=1
+            else
+                REBUILD=0
+            fi
+        fi
+    else
+        REBUILD=1
+    fi
+
+    # Put into log
+    if [ $REBUILD -eq 0 ]; then
+        log "$PACKAGE is up to date."
+    else
+        install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
+        cp -r ${PACKAGE} ${REPOPATH}/build/
+        log "$PACKAGE will be updated. ($LOCALVER-$LOCALREL -> $AURVER-$AURREL)"
+    fi
+
+    cd $REPOPATH
 }
 
 build() {
-	if [ ! -d ${REPOPATH}/build ]; then
-		mkdir ${REPOPATH}/build
-	fi
-	
-	
 	diff_pkg
 	if [ $REBUILD -eq 1 ]; then
 		repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz $PACKAGE
@@ -98,10 +117,10 @@ Config file example:
 
 PERSREPO=my
 GET_FROM_AUR=(
-				package1=a
-				package2=m
-				package3=n
-			)
+	package1=a
+	package2=m
+	package3=n
+)
 
 Options:
 	a ... build always a new package
@@ -110,13 +129,19 @@ Options:
 EOF
 }
 
+if [ -z "$1" ]; then
+    REPOPATH=$PWD
+else
+    REPOPATH=$(exp_path $1)
+fi
+echo "---> $REPOPATH"
+
 # Check given path and show help
-if [ ! -f "${1}/repo.conf" ]; then
+if [ ! -f "${REPOPATH}/repo.conf" ]; then
 	show_help
 	exit 1
 fi
 
-REPOPATH=$1
 cd $REPOPATH
 if [ $? -eq 1 ]; then
 	exit 1
@@ -130,30 +155,41 @@ if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
 	exit 1
 fi
 
+if [ ! -d ".cache" ]; then
+    mkdir .cache
+fi
+
+if [ ! -d "build" ]; then
+    mkdir "build"
+fi
+
 # Download package, check option, build it and add it to repository
 for ITEM in "${GET_FROM_AUR[@]}"; do
-	PACKAGE=$(echo $ITEM | cut -d "=" -f 1)
-	PACKAGE_ACTION=$(echo $ITEM | cut -d "=" -f 2)
-	REBUILD=0
+    PACKAGE=$(echo $ITEM | cut -d "=" -f 1)
+    PACKAGE_ACTION=$(echo $ITEM | cut -d "=" -f 2)
+    REBUILD=0
 
-	case $PACKAGE_ACTION in
-		a) download
-		REBUILD=1
-		build
-		get_data
-		repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
-		;;
-		m) download
-		build
-		if [ $REBUILD -eq 1 ]; then
-			get_data
-			rm -rf build/${PACKAGE}/{src,pkg}
-			repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
-		fi
-		;;
-		*)echo "$PACKAGE will be ignored."
-		;;
-	esac
+    case $PACKAGE_ACTION in
+        a)
+        download
+        REBUILD=1
+        build
+        get_data
+        repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+        ;;
+        m)
+        download
+        build
+        if [ $REBUILD -eq 1 ]; then
+            get_data
+            rm -rf build/${PACKAGE}/{src,pkg}
+            repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+        fi
+        ;;
+        *)
+        echo "$PACKAGE will be ignored."
+        ;;
+    esac
 done
 
 rm -rf .cache/*
