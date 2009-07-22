@@ -88,25 +88,25 @@ diff_pkg() {
 }
 
 build() {
-	diff_pkg
-	if [ $REBUILD -eq 1 ]; then
-		repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz $PACKAGE
-		rm -f ${PACKAGE}-*.pkg.tar.*
+    diff_pkg
+    if [ $REBUILD -eq 1 ]; then
+        repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz $PACKAGE
+        rm -f ${PACKAGE}-*.pkg.tar.*
 
-		cd ${REPOPATH}/build/${PACKAGE}
-		makepkg -f
-		if [ -f *.pkg.tar.* ]; then
-			mv *.pkg.tar.* $REPOPATH/
-		fi
-	fi
+        cd ${REPOPATH}/build/${PACKAGE}
+        makepkg -f
+        if [ -f *.pkg.tar.* ]; then
+            mv *.pkg.tar.* $REPOPATH/
+        fi
+    fi
 
-	cd $REPOPATH
+    cd $REPOPATH
 }
 
 get_data() {
-	# " =" to avoid misuse using the url tag.
-	pkgver=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
-	CARCH=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
+    # " =" to avoid misuse using the url tag.
+    pkgver=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
+    CARCH=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
 }
 
 show_help() {
