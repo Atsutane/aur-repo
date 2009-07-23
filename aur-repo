@@ -88,15 +88,22 @@ diff_pkg() {
 }
 
 build() {
-    diff_pkg
+    if [ "$1" != "nodiff" ]; then
+        diff_pkg
+    fi
+
     if [ $REBUILD -eq 1 ]; then
         repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz $PACKAGE
         rm -f ${PACKAGE}-*.pkg.tar.*
 
-        cd ${REPOPATH}/build/${PACKAGE}
-        makepkg -f
-        if [ -f *.pkg.tar.* ]; then
-            mv *.pkg.tar.* $REPOPATH/
+        if [ -d "${REPOPATH}/build/${PACKAGE}" ]; then
+            cd ${REPOPATH}/build/${PACKAGE}
+            makepkg -f
+            if [ -f *.pkg.tar.* ]; then
+                mv *.pkg.tar.* $REPOPATH/
+            fi
+        else
+            echo "Package not found...skipping"
         fi
     fi
 
@@ -129,6 +136,13 @@ Options:
 EOF
 }
 
+BUILD_ONE=0
+if [ "$1" = "-b" ] && [ -n "$2" ]; then
+    PACKAGE=$2
+    BUILD_ONE=1
+    shift 2
+fi
+
 if [ -z "$1" ]; then
     REPOPATH=$PWD
 else
@@ -149,6 +163,24 @@ fi
 
 # Include the configuration
 source repo.conf
+
+if [ $BUILD_ONE -eq 1 ]; then
+    if [ ! -d "$REPOPATH/build/$PACKAGE" ]; then
+        download
+    fi
+    
+    if [ ! -d "$REPOPATH/build/$PACKAGE" ]; then
+        echo "Package not found...skipping."
+        exit 1
+    fi
+
+    REBUILD=1
+    build nodiff
+    get_data
+    repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+
+    exit 0
+fi
 
 if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
     echo "Error in configuration or no packages specified."
