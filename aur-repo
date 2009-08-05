@@ -40,11 +40,11 @@ download() {
 }
 
 get_pkgver() {
-    grep pkgver= "$1" | cut -d'=' -f2
+    grep "^pkgver=" "$1" | cut -d'=' -f2
 }
 
 get_pkgrel() {
-    grep pkgrel= "$1" | cut -d'=' -f2
+    grep "^pkgrel=" "$1" | cut -d'=' -f2
 }
 
 diff_pkg() {
@@ -112,8 +112,8 @@ build() {
 
 get_data() {
     # " =" to avoid misuse using the url tag.
-    pkgver=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "pkgver ="| cut -d "=" -f 2|cut -d " " -f 2`
-    CARCH=`cat build/${PACKAGE}/pkg/.PKGINFO|grep "arch =" | cut -d "=" -f 2|cut -d " " -f 2`
+    pkgver=`grep "^pkgver =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
+    CARCH=`grep "^arch =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
 }
 
 show_help() {
