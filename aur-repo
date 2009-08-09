@@ -208,6 +208,9 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
         build
         get_data
         repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
+		if [ -d $REPOPATH/build/$PACKAGE/src/*-build ]; then
+			rm -rf $REPOPATH/build/$PACKAGE/src/*-build
+		fi
         ;;
         m)
         download
