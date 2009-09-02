@@ -26,18 +26,17 @@ exp_path() {
 
 # Functions
 download() {
-    #if [ "$DOWNLOADER" = "wget" ]; then
-    #    wget -q "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" -O ".cache/${PACKAGE}.tar.gz"
-    #elif [ "$DOWNLOADER" = "curl" ]; then
-    #    curl "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > ".cache/${PACKAGE}.tar.gz"
-    #else
-    #    echo "no download program specified"
-    #    exit 1
-    #fi
-    cp "/home/badboy/tmp/packages/${PACKAGE}.tar.gz" ".cache/${PACKAGE}.tar.gz"
-    #if [ $? -ne 0 ]; then
-    #    log "Can't download '${PACKAGE}.tar.gz'. Skipping this package..."
-    #fi
+    if [ "$DOWNLOADER" = "wget" ]; then
+        wget -q "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" -O ".cache/${PACKAGE}.tar.gz"
+    elif [ "$DOWNLOADER" = "curl" ]; then
+        curl "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > ".cache/${PACKAGE}.tar.gz"
+    else
+        echo "no download program specified"
+        exit 1
+    fi
+    if [ $? -ne 0 ]; then
+        log "Can't download '${PACKAGE}.tar.gz'. Skipping this package..."
+    fi
 }
 
 get_pkgver() {
@@ -115,37 +114,6 @@ get_data() {
     # " =" to avoid misuse using the url tag.
     pkgver=`grep "^pkgver =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
     CARCH=`grep "^arch =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
-}
-
-bump_version() {
-    local PKGBUILD="$REPOPATH/build/$PACKAGE/PKGBUILD"
-    if [ ! -f "$PKGBUILD" ]; then
-        echo "PKGBUILD not found"
-        exit 1
-    fi
-    local OLDREL=$(get_pkgrel $PKGBUILD)
-    local VER=$(get_pkgver $PKGBUILD)-$OLDREL
-    local INSTVER=$(pacman -Q $PACKAGE)
-    echo $OLDREL
-    echo $VER
-    echo $INSTVER
-    if [ $? -ne 0 ]; then
-        echo "$PACKAGE is not installed...no bump needed"
-        exit 1
-    fi
-    INSTVER=$(echo $INSTVER | awk '{print $2}')
-    local VERCMP=$(vercmp $INSTVER $VER)
-    if [ $VERCMP -eq 0 ]; then
-        echo "versions are equal! bumping pkgrel"
-        local NEWREL=$(echo $OLDREL | awk '{printf $1+1}')
-        log "Package '$PACKAGE': pkgrel bump ($OLDREL => $NEWREL)"
-        sed -i "s/^pkgrel=$OLDREL/pkgrel=$NEWREL/" $PKGBUILD
-    elif [ $VERCMP -lt 0 ]; then
-        log "Package '$PACKAGE': version changed ($INSTVER => $VER)"
-    else
-        echo "version lower/higher then installed. no pkgrel bump"
-        exit 1
-    fi
 }
 
 show_help() {
@@ -233,7 +201,6 @@ if [ $BUILD_ONE -eq 1 ]; then
     fi
 
     REBUILD=1
-    #bump_version
     build nodiff
     get_data
     repo-add $REPOPATH/$PERSREPO.db.tar.gz $PACKAGE-$pkgver-$CARCH.pkg.tar.gz
