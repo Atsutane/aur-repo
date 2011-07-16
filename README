@@ -1,4 +1,4 @@
-aur-repo 0.0.1
+aur-repo 0.0.2dev
 
 This Script is written for ArchLinux systems which provide a repository
 solely containing software from the AUR. The task is to maintain a given
