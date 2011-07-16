@@ -13,11 +13,21 @@ LOCALVER=0
 LOCALREL=1
 AURVER=0
 AURREL=1
-DOWNLOADER="wget" # or "curl"
+AURGET="aurget"
+DBEXT=".db.tar.gz"
+
+BUILDDIR="${BUILDDIR:-/build}"
+PACKAGEDIR="${PACKAGEDIR:-/packages}"
+REPOCONF="${BUILDDIR}/repo.conf"
 
 log() {
     echo $@
-    echo "`date +%Y%m%d`: $@" >> ${REPOPATH}/${PERSREPO}.log
+    echo "`date +%Y%m%d`: $@" >> ${BUILDDIR}/${REPONAME}.log
+}
+
+die() {
+    log $@
+    exit 1
 }
 
 exp_path() {
@@ -26,50 +36,55 @@ exp_path() {
 
 # Functions
 download() {
-    if [ "${DOWNLOADER}" = "wget" ]; then
-        wget -q "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" -O ".cache/${PACKAGE}.tar.gz"
-    elif [ "${DOWNLOADER}" = "curl" ]; then
-        curl -s "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > ".cache/${PACKAGE}.tar.gz"
-    else
-        echo "no download program specified"
-        exit 1
-    fi
+    curl -s "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > "${BUILDDIR}/.cache/${PACKAGE}.tar.gz"
     if [ $? -ne 0 ]; then
         log "Can't download '${PACKAGE}.tar.gz'. Skipping this package..."
     fi
+    cd ${BUILDDIR}/.cache
+    tar -xf ${BUILDDIR}/.cache/${PACKAGE}.tar.gz
 }
 
 get_pkgver() {
-    grep "^pkgver=" "${1}" | cut -d'=' -f2
+    if [ -f "${1}" ]; then
+        grep "^pkgver=" "${1}" | cut -d'=' -f2
+    else
+        echo 0
+    fi
 }
 
 get_pkgrel() {
-    grep "^pkgrel=" "${1}" | cut -d'=' -f2
+    if [ -f "${1}" ]; then
+        grep "^pkgrel=" "${1}" | cut -d'=' -f2
+    else
+        echo 0
+    fi
 }
 
 diff_pkg() {
-    cd ${REPOPATH}/.cache
-    tar -xf ${PACKAGE}.tar.gz
+    if [ -f ${PACKAGEDIR}/${PACKAGE}*${PKGEXT} ]; then
 
-    LOCALVER=`get_pkgver ${REPOPATH}/build/${PACKAGE}/PKGBUILD`
-    AURVER=`get_pkgver ${PACKAGE}/PKGBUILD`
+        LOCALVER=`get_pkgver ${BUILDDIR}/${PACKAGE}/PKGBUILD`
+        AURVER=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
 
-    LOCALREL=`get_pkgrel ${REPOPATH}/build/${PACKAGE}/PKGBUILD`
-    AURREL=`get_pkgrel ${PACKAGE}/PKGBUILD`
+        LOCALREL=`get_pkgrel ${BUILDDIR}/${PACKAGE}/PKGBUILD`
+        AURREL=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
 
-    if [ ${REBUILD} -eq 1 ]; then
-        rm "${REPOPATH}/build/${PACKAGE}/PKGBUILD"
-    elif [ -f "${REPOPATH}/build/${PACKAGE}/PKGBUILD" ]; then
-        VERCMP=`vercmp "${AURVER}" "${LOCALVER}"`
-        if [ ${VERCMP} -gt 0 ]; then
-            REBUILD=1
-        elif [ ${VERCMP} -eq 0 ]; then
-            VERCMP=`vercmp "${AURREL}" "${LOCALREL}"`
-            if  [ ${VERCMP} -gt 0 ]; then
+        if [ ${REBUILD} -eq 1 ]; then
+            rm "${BUILDDIR}/${PACKAGE}/PKGBUILD"
+        elif [ -f "${BUILDDIR}/${PACKAGE}/PKGBUILD" ]; then
+            VERCMP=`vercmp "${AURVER}" "${LOCALVER}"`
+            if [ ${VERCMP} -gt 0 ]; then
                 REBUILD=1
-            else
-                REBUILD=0
+            elif [ ${VERCMP} -eq 0 ]; then
+                VERCMP=`vercmp "${AURREL}" "${LOCALREL}"`
+                if  [ ${VERCMP} -gt 0 ]; then
+                    REBUILD=1
+                else
+                    REBUILD=0
+                fi
             fi
+        else
+            REBUILD=1
         fi
     else
         REBUILD=1
@@ -79,12 +94,21 @@ diff_pkg() {
     if [ ${REBUILD} -eq 0 ]; then
         log "${PACKAGE} is up to date."
     else
-        install -Dm644 ${PACKAGE}/PKGBUILD ${REPOPATH}/build/${PACKAGE}/PKGBUILD || exit 1
-        cp -r ${PACKAGE} ${REPOPATH}/build/
+        cp -r ${BUILDDIR}/.cache/${PACKAGE} ${BUILDDIR}/
         log "${PACKAGE} will be updated. (${LOCALVER}-${LOCALREL} -> ${AURVER}-${AURREL})"
     fi
 
-    cd ${REPOPATH}
+    cd ${BUILDDIR}
+}
+
+reporemove() {
+    if [ -f "${PACKAGEDIR}/${REPONAME}${DBEXT}" ]; then
+        repo-remove "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
+    fi
+}
+
+repoadd() {
+    repo-add "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
 }
 
 build() {
@@ -93,47 +117,57 @@ build() {
     fi
 
     if [ ${REBUILD} -eq 1 ]; then
-        repo-remove ${REPOPATH}/${PERSREPO}.db.tar.gz ${PACKAGE}
-        rm -f ${PACKAGE}-*.pkg.tar.*
+        reporemove ${PACKAGE}
+        rm -f ${PACKAGEDIR}/${PACKAGE}-[0-9]*.pkg.tar.* # remove old file
 
-        if [ -d "${REPOPATH}/build/${PACKAGE}" ]; then
-            cd ${REPOPATH}/build/${PACKAGE}
+        if [ -d "${BUILDDIR}/${PACKAGE}" ]; then
+            cd ${BUILDDIR}/${PACKAGE}
             makepkg -f
+            if [ $? -ne 0 ]; then
+                log "(${PACKAGE}) Package build failed...skipping"
+                REBUILD=0
+            fi
             if [ -f *.pkg.tar.* ]; then
-                mv *.pkg.tar.* ${REPOPATH}/
+                mv *.pkg.tar.* ${PACKAGEDIR}/
             fi
         else
-            echo "Package not found...skipping"
+            log "(${PACKAGE}) Package not found...skipping"
+            REBUILD=0
         fi
     fi
 
-    cd ${REPOPATH}
+    cd ${PACKAGEDIR}
 }
 
 get_data() {
-    # " =" to avoid misuse using the url tag.
-    pkgver=`grep "^pkgver =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
-    CARCH=`grep "^arch =" build/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
+    if [ -f "${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO" ]; then
+        # " =" to avoid misuse using the url tag.
+        pkgver=`grep "^pkgver =" ${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
+        CARCH=`grep "^arch =" ${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
+        return 0
+    else
+        return 1
+    fi
 }
 
 show_help() {
 cat << EOF
-    Usage: $(basename ${0}) [REPOPATH]
-    $(basename ${0}) -b <package> [REPOPATH]
+Usage: $(basename ${0})
+$(basename ${0}) -b <package>
 
-    Config file example:
+Config file example:
 
-    PERSREPO=my
-    GET_FROM_AUR=(
+  REPONAME=my-repo
+  GET_FROM_AUR=(
     package1=a
     package2=m
     package3=n
-    )
+  )
 
-    Options:
-    a ... build always a new package
-    m ... only build a new package if the PKGBUILD in AUR changed
-    n ... ignore package (useful if the package at AUR is currently broken)
+Options:
+a ... build always a new package
+m ... only build a new package if the PKGBUILD in AUR changed
+n ... ignore package (useful if the package at AUR is currently broken)
 EOF
 }
 
@@ -142,6 +176,19 @@ if [ "${1}" = "-h" ]; then
     show_help
     exit 1
 fi
+
+# Check given path and show help
+if [ ! -f "${REPOCONF}" ]; then
+    echo "No config found."
+    show_help
+    exit 1
+fi
+
+# Include the configuration
+source ${REPOCONF}
+log "---> Starting build, using ${REPOCONF}"
+
+log "---> Repo: ${REPONAME}"
 
 BUILD_ONE=0
 if [ "${1}" = "-b" ]; then
@@ -155,34 +202,16 @@ if [ "${1}" = "-b" ]; then
     fi
 fi
 
-if [ -z "${1}" ]; then
-    REPOPATH=${PWD}
-else
-    REPOPATH=$(exp_path ${1})
-fi
-echo "---> ${REPOPATH}"
 
-# Check given path and show help
-if [ ! -f "${REPOPATH}/repo.conf" ]; then
-    show_help
-    exit 1
-fi
 
-cd ${REPOPATH}
+cd ${BUILDDIR}
 if [ $? -eq 1 ]; then
-    exit 1
+    die "Can't find build dir: ${BUILDDIR}"
 fi
 
-if [ ! -d ".cache" ]; then
-    mkdir ".cache"
+if [ ! -d "${BUILDDIR}/.cache" ]; then
+    mkdir "${BUILDDIR}/.cache"
 fi
-
-if [ ! -d "build" ]; then
-    mkdir "build"
-fi
-
-# Include the configuration
-source repo.conf
 
 # Include makepkg.conf for PKGEXT
 source /etc/makepkg.conf
@@ -192,31 +221,27 @@ fi
 
 if [ ${BUILD_ONE} -eq 1 ]; then
     NO_DOWNLOAD=1
-    if [ ! -d "${REPOPATH}/build/${PACKAGE}" ]; then
+    if [ ! -d "${BUILDDIR}/${PACKAGE}" ]; then
         NO_DOWNLOAD=0
         download
-        cd ${REPOPATH}/.cache
-        tar -xf ${PACKAGE}.tar.gz
-        cp -r "${PACKAGE}" "${REPOPATH}/build/"
-        cd "${REPOPATH}"
     fi
 
-    if [ ! -d "${REPOPATH}/build/${PACKAGE}" ]; then
-        echo "Package not found...skipping."
-        exit 1
+    if [ ! -d "${BUILDDIR}/${PACKAGE}" ]; then
+        die "(${PACKAGE}) Package not found...skipping."
     fi
 
     REBUILD=1
     build nodiff
     get_data
-    repo-add ${REPOPATH}/${PERSREPO}.db.tar.gz ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+    if [ $? -eq 0 ]; then
+        repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+    fi
 
     exit 0
 fi
 
 if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
-    echo "Error in configuration or no packages specified."
-    exit 1
+    die "Error in configuration or no packages specified."
 fi
 
 
@@ -232,9 +257,12 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
             REBUILD=1
             build
             get_data
-            repo-add ${REPOPATH}/${PERSREPO}.db.tar.gz ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
-            if [ -d "${REPOPATH}/build/${PACKAGE}/src/*-build" ]; then
-                rm -rf ${REPOPATH}/build/${PACKAGE}/src/*-build
+            if [ $? -eq 0 ]; then
+                repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                # clean up build dir (in -git packages)
+                if [ -d "${BUILDDIR}/${PACKAGE}/src/*-build" ]; then
+                    rm -rf ${BUILDDIR}/${PACKAGE}/src/*-build
+                fi
             fi
             ;;
         m)
@@ -242,14 +270,18 @@ for ITEM in "${GET_FROM_AUR[@]}"; do
             build
             if [ ${REBUILD} -eq 1 ]; then
                 get_data
-                rm -rf build/${PACKAGE}/{src,pkg}
-                repo-add ${REPOPATH}/${PERSREPO}.db.tar.gz ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                if [ $? -eq 0 ]; then
+                    rm -rf ${BUILDDIR}/${PACKAGE}/{src,pkg}
+                    repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                fi
             fi
             ;;
         *)
-            echo "${PACKAGE} will be ignored."
+            log "${PACKAGE} will be ignored."
             ;;
     esac
 done
+
+die "---> build finished."
 
 #rm -rf .cache/*
