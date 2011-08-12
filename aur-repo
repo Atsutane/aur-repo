@@ -5,10 +5,9 @@
 # URL     : https://github.com/badboy/aur-repo
 #
 #        Based on work by Thorsten Toepper, who initially create aur-repo.
-#        Thorsten's version was inspired and partly based on work by 
+#        Thorsten's version was inspired and partly based on work by
 #        Stefan Husmann and Michal Krenek
 
-# Options:
 AURURL="http://aur.archlinux.org/packages"
 REBUILD=0
 LOCALVER=0
@@ -17,14 +16,16 @@ AURVER=0
 AURREL=1
 AURGET="aurget"
 DBEXT=".db.tar.gz"
+PKGEXT=".pkg.tar.gz"
 
 BUILDDIR="${BUILDDIR:-/build}"
 PACKAGEDIR="${PACKAGEDIR:-/packages}"
 REPOCONF="${BUILDDIR}/repo.conf"
+DRY_RUN=0
 
 log() {
     echo $@
-    echo "`date +%Y%m%d`: $@" >> ${BUILDDIR}/${REPONAME}.log
+    [ ${DRY_RUN} -eq 0 ] && echo "[`date +'%Y-%m-%d %H:%M'`]: $@" >> ${BUILDDIR}/${REPONAME}.log
 }
 
 die() {
@@ -36,14 +37,34 @@ exp_path() {
     echo "`cd ${1}; pwd`";
 }
 
-# Functions
+shell_run() {
+    if [ $DRY_RUN -eq 0 ]; then
+        $@
+    else
+        echo "DRYRUN: ${@}"
+    fi
+}
+
+reporemove() {
+    if [ -f "${PACKAGEDIR}/${REPONAME}${DBEXT}" ]; then
+        shell_run repo-remove "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
+    fi
+}
+
+repoadd() {
+    shell_run repo-add "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
+}
+
 download() {
-    curl -s "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz" > "${BUILDDIR}/.cache/${PACKAGE}.tar.gz"
+    wget -qO "${BUILDDIR}/.cache/${PACKAGE}.tar.gz" "${AURURL}/${PACKAGE}/${PACKAGE}.tar.gz"
     if [ $? -ne 0 ]; then
         log "Can't download '${PACKAGE}.tar.gz'. Skipping this package..."
+        rm -f "${BUILDDIR}/.cache/${PACKAGE}.tar.gz"
+        return 1
     fi
     cd ${BUILDDIR}/.cache
     tar -xf ${BUILDDIR}/.cache/${PACKAGE}.tar.gz
+    return 0
 }
 
 get_pkgver() {
@@ -63,13 +84,11 @@ get_pkgrel() {
 }
 
 diff_pkg() {
-    if [ -f ${PACKAGEDIR}/${PACKAGE}*${PKGEXT} ]; then
-
+    AURVER=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
+    AURREL=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
+    if [ `find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" | wc -l` -ne 0 ]; then
         LOCALVER=`get_pkgver ${BUILDDIR}/${PACKAGE}/PKGBUILD`
-        AURVER=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
-
         LOCALREL=`get_pkgrel ${BUILDDIR}/${PACKAGE}/PKGBUILD`
-        AURREL=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
 
         if [ ${REBUILD} -eq 1 ]; then
             rm "${BUILDDIR}/${PACKAGE}/PKGBUILD"
@@ -89,6 +108,8 @@ diff_pkg() {
             REBUILD=1
         fi
     else
+        LOCALVER=nil
+        LOCALREL=nil
         REBUILD=1
     fi
 
@@ -96,21 +117,11 @@ diff_pkg() {
     if [ ${REBUILD} -eq 0 ]; then
         log "${PACKAGE} is up to date."
     else
-        cp -r ${BUILDDIR}/.cache/${PACKAGE} ${BUILDDIR}/
+        shell_run cp -r ${BUILDDIR}/.cache/${PACKAGE} ${BUILDDIR}/
         log "${PACKAGE} will be updated. (${LOCALVER}-${LOCALREL} -> ${AURVER}-${AURREL})"
     fi
 
     cd ${BUILDDIR}
-}
-
-reporemove() {
-    if [ -f "${PACKAGEDIR}/${REPONAME}${DBEXT}" ]; then
-        repo-remove "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
-    fi
-}
-
-repoadd() {
-    repo-add "${PACKAGEDIR}/${REPONAME}${DBEXT}" "${1}"
 }
 
 build() {
@@ -120,18 +131,17 @@ build() {
 
     if [ ${REBUILD} -eq 1 ]; then
         reporemove ${PACKAGE}
-        rm -f ${PACKAGEDIR}/${PACKAGE}-[0-9]*.pkg.tar.* # remove old file
+        shell_run find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" -delete
 
         if [ -d "${BUILDDIR}/${PACKAGE}" ]; then
             cd ${BUILDDIR}/${PACKAGE}
-            makepkg -f
+            shell_run find  . -type f -iname "${PACKAGE}*${PKGEXT}" -delete
+            shell_run makepkg -f
             if [ $? -ne 0 ]; then
                 log "(${PACKAGE}) Package build failed...skipping"
                 REBUILD=0
             fi
-            if [ -f *.pkg.tar.* ]; then
-                mv *.pkg.tar.* ${PACKAGEDIR}/
-            fi
+            find . -iname "*${PKGEXT}" -exec cp {} ${PACKAGEDIR}/ \;
         else
             log "(${PACKAGE}) Package not found...skipping"
             REBUILD=0
@@ -155,7 +165,18 @@ get_data() {
 show_help() {
 cat << EOF
 Usage: $(basename ${0})
-$(basename ${0}) -b <package>
+$(basename ${0}) [-n] [command] [options]
+
+  -n : Dry run. Show executed commands but don't run them.
+
+Commands:
+  update                    Update the whole repository.
+  update package            Force update of the specified package
+  add package [mode]        Add new package to the list, 'mode' is the same as
+                            in the config file and defaults to 'm'.
+  addbuild package [mode]   Same as above plus building the package right away.
+  info                      Show some info about the repository.
+  list                      List all current packages in the repository database.
 
 Config file example:
 
@@ -173,59 +194,48 @@ n ... ignore package (useful if the package at AUR is currently broken)
 EOF
 }
 
-
-if [ "${1}" = "-h" ]; then
-    show_help
-    exit 1
-fi
-
-# Check given path and show help
-if [ ! -f "${REPOCONF}" ]; then
-    echo "No config found."
-    show_help
-    exit 1
-fi
-
-# Include the configuration
-source ${REPOCONF}
-log "---> Starting build, using ${REPOCONF}"
-
-log "---> Repo: ${REPONAME}"
-
-BUILD_ONE=0
-if [ "${1}" = "-b" ]; then
-    if [ -n "${2}" ]; then
-        PACKAGE=${2}
-        BUILD_ONE=1
-        shift 2
-    else
+setup() {
+    # Check given path and show help
+    if [ ! -f "${REPOCONF}" ]; then
+        echo "No config found."
         show_help
         exit 1
     fi
-fi
 
+    # Include the configuration
+    source ${REPOCONF}
+    log "---> using ${REPOCONF}"
+    log "---> Repo: ${REPONAME}"
 
+    cd ${BUILDDIR}
+    if [ $? -eq 1 ]; then
+        die "Can't find build dir: ${BUILDDIR}"
+    fi
 
-cd ${BUILDDIR}
-if [ $? -eq 1 ]; then
-    die "Can't find build dir: ${BUILDDIR}"
-fi
+    if [ ! -d "${BUILDDIR}/.cache" ]; then
+        mkdir "${BUILDDIR}/.cache"
+    fi
 
-if [ ! -d "${BUILDDIR}/.cache" ]; then
-    mkdir "${BUILDDIR}/.cache"
-fi
+    # Include makepkg.conf for PKGEXT
+    source /etc/makepkg.conf
+    if [ "${PKGEXT}" = "" ]; then
+        PKGEXT=".pkg.tar.gz"
+    fi
+}
 
-# Include makepkg.conf for PKGEXT
-source /etc/makepkg.conf
-if [ "${PKGEXT}" = "" ]; then
-    PKGEXT=".pkg.tar.gz"
-fi
+update_one() {
+    PACKAGE=${1}
+    BUILD_ONE=1
+    log "---> Update '${PACKAGE}'"
 
-if [ ${BUILD_ONE} -eq 1 ]; then
     NO_DOWNLOAD=1
     if [ ! -d "${BUILDDIR}/${PACKAGE}" ]; then
         NO_DOWNLOAD=0
-        download
+        if download; then
+            shell_run cp -r ${BUILDDIR}/.cache/${PACKAGE} ${BUILDDIR}/
+        else
+            die "Download failed. Nothig to work on."
+        fi
     fi
 
     if [ ! -d "${BUILDDIR}/${PACKAGE}" ]; then
@@ -239,51 +249,151 @@ if [ ${BUILD_ONE} -eq 1 ]; then
         repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
     fi
 
-    exit 0
-fi
+    log "---> update finished."
+}
 
-if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
-    die "Error in configuration or no packages specified."
-fi
+update_all() {
+    log "---> full update"
 
+    if [ ${#GET_FROM_AUR[@]} -eq 0 ]; then
+        die "Error in configuration or no packages specified."
+    fi
 
-# Download package, check option, build it and add it to repository
-for ITEM in "${GET_FROM_AUR[@]}"; do
-    PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
-    PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
-    REBUILD=0
+    # Download package, check option, build it and add it to repository
+    for ITEM in "${GET_FROM_AUR[@]}"; do
+        PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
+        PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
+        REBUILD=0
 
-    case ${PACKAGE_ACTION} in
-        a)
-            download
-            REBUILD=1
-            build
-            get_data
-            if [ $? -eq 0 ]; then
-                repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
-                # clean up build dir (in -git packages)
-                if [ -d "${BUILDDIR}/${PACKAGE}/src/*-build" ]; then
-                    rm -rf ${BUILDDIR}/${PACKAGE}/src/*-build
+        case ${PACKAGE_ACTION} in
+            a)
+                download
+                if [ $? -ne 0 ]; then
+                    continue
                 fi
-            fi
-            ;;
-        m)
-            download
-            build
-            if [ ${REBUILD} -eq 1 ]; then
+                REBUILD=1
+                build
                 get_data
                 if [ $? -eq 0 ]; then
-                    rm -rf ${BUILDDIR}/${PACKAGE}/{src,pkg}
-                    repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                    shell_run repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                    # clean up build dir (in -git packages)
+                    if [ -d "${BUILDDIR}/${PACKAGE}/src/*-build" ]; then
+                        rm -rf ${BUILDDIR}/${PACKAGE}/src/*-build
+                    fi
                 fi
+                ;;
+            m)
+                download
+                if [ $? -ne 0 ]; then
+                    continue
+                fi
+                build
+                if [ ${REBUILD} -eq 1 ]; then
+                    get_data
+                    if [ $? -eq 0 ]; then
+                        rm -rf ${BUILDDIR}/${PACKAGE}/{src,pkg}
+                        shell_run repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                    fi
+                fi
+                ;;
+            *)
+                log "${PACKAGE} will be ignored."
+                ;;
+        esac
+    done
+    log "---> full update finished."
+}
+
+add_package() {
+    if [ -z "${1}" ]; then
+        die "Please give a package name and optional a new mode."
+    fi
+    NEW_PACKAGE=${1}
+
+    if [ -n "${2}" ]; then
+        if [ ${2} != "m" ] && [ ${2} != "n" ] && [ ${2} != "a" ]; then
+            die "Please choose a correct mode: a=always, m=modified, n=never"
+        fi
+        NEW_MODE=${2}
+    else
+        NEW_MODE=m
+    fi
+
+    for ITEM in "${GET_FROM_AUR[@]}"; do
+        PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
+        PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
+
+        if [ "${PACKAGE}" = "${NEW_PACKAGE}" ]; then
+            die "The specified package is already in your list. Please change mode manually."
+        fi
+    done
+
+    (
+        echo "REPONAME=${REPONAME}"
+        echo "GET_FROM_AUR=("
+        for ITEM in "${GET_FROM_AUR[@]}"; do
+            PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
+            PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
+
+            if [ "${PACKAGE}" = "${NEW_PACKAGE}" ]; then
+                die "The specified package is already in your list. Please change mode manually."
             fi
-            ;;
-        *)
-            log "${PACKAGE} will be ignored."
-            ;;
-    esac
-done
+            echo "    ${ITEM}"
+        done
+        echo "    ${NEW_PACKAGE}=${NEW_MODE}"
+        echo ")"
+    ) > "${REPOCONF}"
+    log "---> Added ${NEW_PACKAGE} to ${REPOCONF}"
 
-die "---> build finished."
+}
 
-#rm -rf .cache/*
+if [ "${1}" = "-n" ]; then
+    DRY_RUN=1
+    log "---> DRYRUN!"
+    shift
+fi
+
+list_packages() {
+    tar -atf "${PACKAGEDIR}/${REPONAME}${DBEXT}" | sed 's#/.\+\?##' | uniq
+}
+
+
+setup
+
+case "${1}" in
+    add)
+        shift
+        add_package ${@}
+        ;;
+    addbuild)
+        shift
+        add_package ${@}
+        update_one "${1}"
+        ;;
+    update|build)
+        if [ -z "${2}" ]; then
+            update_all
+        else
+            update_one "${2}"
+        fi
+        ;;
+    list)
+        list_packages
+        ;;
+    info)
+        echo "Config          : ${REPOCONF}"
+        echo "Logfile         : ${BUILDDIR}/${REPONAME}.log"
+        echo "Repository      : ${REPONAME}"
+        echo "Builddir        : ${BUILDDIR}"
+        echo "Packagedir      : ${PACKAGEDIR}"
+        echo "No. of packages : ${#GET_FROM_AUR[@]}"
+        ;;
+    -h|help)
+        show_help
+        ;;
+    *)
+        show_help
+        ;;
+esac
+
+exit 0
