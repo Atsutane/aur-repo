@@ -1,12 +1,13 @@
 #!/bin/bash
 # aur-repo - keep your local repo with packages from AUR up to date
-# Version : 0.0.2dev
+# Version : 1.0.0
 # Author  : Jan-Erik Rediger (badboy_) <badboy at archlinux dot us>
-# URL     : https://github.com/badboy/aur-repo
+# URL     : https://github.com/badboy/aur-repo/tree/ctdo
 #
 #        Based on work by Thorsten Toepper, who initially create aur-repo.
 #        Thorsten's version was inspired and partly based on work by
 #        Stefan Husmann and Michal Krenek
+VERSION=1.0.0
 
 AURURL="http://aur.archlinux.org/packages"
 REBUILD=0
@@ -164,8 +165,7 @@ get_data() {
 
 show_help() {
 cat << EOF
-Usage: $(basename ${0})
-$(basename ${0}) [-n] [command] [options]
+Usage: $(basename ${0}) [-n] [command] [options]
 
   -n : Dry run. Show executed commands but don't run them.
 
@@ -191,6 +191,13 @@ Options:
 a ... build always a new package
 m ... only build a new package if the PKGBUILD in AUR changed
 n ... ignore package (useful if the package at AUR is currently broken)
+EOF
+}
+
+show_version() {
+    cat <<EOF
+$(basename ${0}) v${VERSION} © 2011 Jan-Erik Rediger
+  more at https://github.com/badboy/aur-repo/tree/ctdo
 EOF
 }
 
@@ -390,6 +397,9 @@ case "${1}" in
         ;;
     -h|help)
         show_help
+        ;;
+    -v|--version|version)
+        show_version
         ;;
     *)
         show_help

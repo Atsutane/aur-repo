@@ -1,6 +1,0 @@
-aur-repo 0.0.2dev
-
-This Script is written for ArchLinux systems which provide a repository
-solely containing software from the AUR. The task is to maintain a given
-set of packages from the AUR and keep them up to date in the local repo.
-
