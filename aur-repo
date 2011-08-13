@@ -140,7 +140,7 @@ build() {
         if [ -d "${BUILDDIR}/${PACKAGE}" ]; then
             cd "${BUILDDIR}/${PACKAGE}"
             shell_run find  . -type f -iname "${PACKAGE}-*${PKGEXT}" -delete
-            shell_run makepkg -f
+            shell_run makepkg -f $MAKEPKG_EXTRA_ARGS
             if [ $? -ne 0 ]; then
                 log "(${PACKAGE}) Package build failed...skipping"
                 REBUILD=0
