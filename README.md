@@ -7,9 +7,12 @@ set of packages from the AUR and keep them up to date in the local repo.
 ## Usage
 
 ```
-Usage: aur-repo [-n] [command] [options]
+Usage: aur-repo [-hnqv] [command] [options]
 
+  -h : Show this help and exit.
   -n : Dry run. Show executed commands but don't run them.
+  -q : Be quiet. Do not print any message (but log them to the logfile).
+  -v : Show version.
 
 Commands:
   update                    Update the whole repository.
@@ -34,5 +37,4 @@ Options:
 a ... build always a new package
 m ... only build a new package if the PKGBUILD in AUR changed
 n ... ignore package (useful if the package at AUR is currently broken)
-
 ```
