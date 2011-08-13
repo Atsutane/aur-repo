@@ -17,6 +17,7 @@ Commands:
   add package [mode]        Add new package to the list, 'mode' is the same as
                             in the config file and defaults to 'm'.
   addbuild package [mode]   Same as above plus building the package right away.
+  remove package            Remove package from repository and delete all source files.
   info                      Show some info about the repository.
   list                      List all current packages in the repository database.
 
@@ -33,4 +34,5 @@ Options:
 a ... build always a new package
 m ... only build a new package if the PKGBUILD in AUR changed
 n ... ignore package (useful if the package at AUR is currently broken)
+
 ```
