@@ -397,32 +397,39 @@ if [ "${1}" = "-n" ]; then
     shift
 fi
 
-setup
 
 case "${1}" in
     add)
         shift
+        setup
         add_package ${@}
         ;;
     addbuild)
         shift
+        setup
         add_package ${@}
         update_one "${1}"
         ;;
     update|build)
-        if [ -z "${2}" ]; then
+        shift
+        setup
+        if [ -z "${1}" ]; then
             update_all
         else
-            update_one "${2}"
+            update_one "${1}"
         fi
         ;;
     remove)
-        remove_package "${2}"
+        shift
+        setup
+        remove_package "${1}"
         ;;
     list)
+        setup
         list_packages
         ;;
     info)
+        setup
         echo "Config          : ${REPOCONF}"
         echo "Logfile         : ${BUILDDIR}/${REPONAME}.log"
         echo "Repository      : ${REPONAME}"
