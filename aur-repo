@@ -34,8 +34,11 @@ die() {
     exit 1
 }
 
-exp_path() {
-    echo "`cd ${1}; pwd`";
+expand_path() {
+    local cwd="$(pwd)"
+    cd "$1"
+    pwd
+    cd "$cwd"
 }
 
 shell_run() {
@@ -85,21 +88,21 @@ get_pkgrel() {
 }
 
 diff_pkg() {
-    AURVER=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
-    AURREL=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
+    local aurver=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
+    local aurrel=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
     if [ `find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" | wc -l` -ne 0 ]; then
-        LOCALVER=`get_pkgver ${BUILDDIR}/${PACKAGE}/PKGBUILD`
-        LOCALREL=`get_pkgrel ${BUILDDIR}/${PACKAGE}/PKGBUILD`
+        local localver=`get_pkgver ${BUILDDIR}/${PACKAGE}/PKGBUILD`
+        local localrel=`get_pkgrel ${BUILDDIR}/${PACKAGE}/PKGBUILD`
 
         if [ ${REBUILD} -eq 1 ]; then
             rm "${BUILDDIR}/${PACKAGE}/PKGBUILD"
         elif [ -f "${BUILDDIR}/${PACKAGE}/PKGBUILD" ]; then
-            VERCMP=`vercmp "${AURVER}" "${LOCALVER}"`
-            if [ ${VERCMP} -gt 0 ]; then
+            local vercmp=`vercmp "${aurver}" "${localver}"`
+            if [ ${vercmp} -gt 0 ]; then
                 REBUILD=1
-            elif [ ${VERCMP} -eq 0 ]; then
-                VERCMP=`vercmp "${AURREL}" "${LOCALREL}"`
-                if  [ ${VERCMP} -gt 0 ]; then
+            elif [ ${vercmp} -eq 0 ]; then
+                local vercmp=`vercmp "${aurrel}" "${localrel}"`
+                if  [ ${vercmp} -gt 0 ]; then
                     REBUILD=1
                 else
                     REBUILD=0
@@ -109,8 +112,8 @@ diff_pkg() {
             REBUILD=1
         fi
     else
-        LOCALVER=nil
-        LOCALREL=nil
+        local localver=nil
+        local localrel=nil
         REBUILD=1
     fi
 
@@ -131,11 +134,11 @@ build() {
     fi
 
     if [ ${REBUILD} -eq 1 ]; then
-        reporemove ${PACKAGE}
+        reporemove "${PACKAGE}"
         shell_run find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" -delete
 
         if [ -d "${BUILDDIR}/${PACKAGE}" ]; then
-            cd ${BUILDDIR}/${PACKAGE}
+            cd "${BUILDDIR}/${PACKAGE}"
             shell_run find  . -type f -iname "${PACKAGE}*${PKGEXT}" -delete
             shell_run makepkg -f
             if [ $? -ne 0 ]; then
@@ -155,7 +158,7 @@ build() {
 get_data() {
     if [ -f "${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO" ]; then
         # " =" to avoid misuse using the url tag.
-        pkgver=`grep "^pkgver =" ${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
+        PKGVER=`grep "^pkgver =" ${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
         CARCH=`grep "^arch =" ${BUILDDIR}/${PACKAGE}/pkg/.PKGINFO | cut -d "=" -f 2|cut -d " " -f 2`
         return 0
     else
@@ -253,7 +256,7 @@ update_one() {
     build nodiff
     get_data
     if [ $? -eq 0 ]; then
-        repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+        repoadd ${PACKAGE}-${PKGVER}-${CARCH}${PKGEXT}
     fi
 
     log "---> update finished."
@@ -282,7 +285,7 @@ update_all() {
                 build
                 get_data
                 if [ $? -eq 0 ]; then
-                    shell_run repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                    shell_run repoadd ${PACKAGE}-${PKGVER}-${CARCH}${PKGEXT}
                     # clean up build dir (in -git packages)
                     if [ -d "${BUILDDIR}/${PACKAGE}/src/*-build" ]; then
                         rm -rf ${BUILDDIR}/${PACKAGE}/src/*-build
@@ -299,7 +302,7 @@ update_all() {
                     get_data
                     if [ $? -eq 0 ]; then
                         rm -rf ${BUILDDIR}/${PACKAGE}/{src,pkg}
-                        shell_run repoadd ${PACKAGE}-${pkgver}-${CARCH}${PKGEXT}
+                        shell_run repoadd ${PACKAGE}-${PKGVER}-${CARCH}${PKGEXT}
                     fi
                 fi
                 ;;
@@ -315,22 +318,22 @@ add_package() {
     if [ -z "${1}" ]; then
         die "Please give a package name and optional a new mode."
     fi
-    NEW_PACKAGE=${1}
+    local new_package=${1}
 
     if [ -n "${2}" ]; then
         if [ ${2} != "m" ] && [ ${2} != "n" ] && [ ${2} != "a" ]; then
             die "Please choose a correct mode: a=always, m=modified, n=never"
         fi
-        NEW_MODE=${2}
+        local new_mode=${2}
     else
-        NEW_MODE=m
+        local new_mode=m
     fi
 
-    for ITEM in "${GET_FROM_AUR[@]}"; do
-        PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
-        PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
+    for item in "${GET_FROM_AUR[@]}"; do
+        local package=$(echo ${item} | cut -d "=" -f 1)
+        local package_action=$(echo ${item} | cut -d "=" -f 2)
 
-        if [ "${PACKAGE}" = "${NEW_PACKAGE}" ]; then
+        if [ "${package}" = "${new_package}" ]; then
             die "The specified package is already in your list. Please change mode manually."
         fi
     done
@@ -338,19 +341,19 @@ add_package() {
     (
         echo "REPONAME=${REPONAME}"
         echo "GET_FROM_AUR=("
-        for ITEM in "${GET_FROM_AUR[@]}"; do
-            PACKAGE=$(echo ${ITEM} | cut -d "=" -f 1)
-            PACKAGE_ACTION=$(echo ${ITEM} | cut -d "=" -f 2)
+        for item in "${GET_FROM_AUR[@]}"; do
+            local package=$(echo ${item} | cut -d "=" -f 1)
+            local package_action=$(echo ${item} | cut -d "=" -f 2)
 
-            if [ "${PACKAGE}" = "${NEW_PACKAGE}" ]; then
+            if [ "${package}" = "${new_package}" ]; then
                 die "The specified package is already in your list. Please change mode manually."
             fi
-            echo "    ${ITEM}"
+            echo "    ${item}"
         done
-        echo "    ${NEW_PACKAGE}=${NEW_MODE}"
+        echo "    ${new_package}=${new_mode}"
         echo ")"
     ) > "${REPOCONF}"
-    log "---> Added ${NEW_PACKAGE} to ${REPOCONF}"
+    log "---> Added ${new_package} to ${REPOCONF}"
 
 }
 
@@ -364,6 +367,11 @@ list_packages() {
     tar -atf "${PACKAGEDIR}/${REPONAME}${DBEXT}" | sed 's#/.\+\?##' | uniq
 }
 
+if [ "${1}" = "-n" ]; then
+    DRY_RUN=1
+    log "---> DRYRUN!"
+    shift
+fi
 
 setup
 
