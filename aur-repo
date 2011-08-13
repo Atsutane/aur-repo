@@ -73,7 +73,7 @@ download() {
 
 get_pkgver() {
     if [ -f "${1}" ]; then
-        grep "^pkgver=" "${1}" | cut -d'=' -f2
+        grep "^pkgver=" "${1}" | cut -d'=' -f2 | sed "s#['\"]##g"
     else
         echo 0
     fi
@@ -81,7 +81,7 @@ get_pkgver() {
 
 get_pkgrel() {
     if [ -f "${1}" ]; then
-        grep "^pkgrel=" "${1}" | cut -d'=' -f2
+        grep "^pkgrel=" "${1}" | cut -d'=' -f2 | sed "s#['\"]##g"
     else
         echo 0
     fi
