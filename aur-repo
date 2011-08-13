@@ -90,7 +90,7 @@ get_pkgrel() {
 diff_pkg() {
     local aurver=`get_pkgver ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
     local aurrel=`get_pkgrel ${BUILDDIR}/.cache/${PACKAGE}/PKGBUILD`
-    if [ `find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" | wc -l` -ne 0 ]; then
+    if [ `find "${PACKAGEDIR}" -type f -name "${PACKAGE}-*${PKGEXT}" | wc -l` -ne 0 ]; then
         local localver=`get_pkgver ${BUILDDIR}/${PACKAGE}/PKGBUILD`
         local localrel=`get_pkgrel ${BUILDDIR}/${PACKAGE}/PKGBUILD`
 
@@ -122,7 +122,7 @@ diff_pkg() {
         log "${PACKAGE} is up to date."
     else
         shell_run cp -r ${BUILDDIR}/.cache/${PACKAGE} ${BUILDDIR}/
-        log "${PACKAGE} will be updated. (${LOCALVER}-${LOCALREL} -> ${AURVER}-${AURREL})"
+        log "${PACKAGE} will be updated. (${localver}-${localrel} -> ${aurver}-${aurrel})"
     fi
 
     cd ${BUILDDIR}
@@ -135,11 +135,11 @@ build() {
 
     if [ ${REBUILD} -eq 1 ]; then
         reporemove "${PACKAGE}"
-        shell_run find "${PACKAGEDIR}" -type f -name "${PACKAGE}*${PKGEXT}" -delete
+        shell_run find "${PACKAGEDIR}" -type f -name "${PACKAGE}-*${PKGEXT}" -delete
 
         if [ -d "${BUILDDIR}/${PACKAGE}" ]; then
             cd "${BUILDDIR}/${PACKAGE}"
-            shell_run find  . -type f -iname "${PACKAGE}*${PKGEXT}" -delete
+            shell_run find  . -type f -iname "${PACKAGE}-*${PKGEXT}" -delete
             shell_run makepkg -f
             if [ $? -ne 0 ]; then
                 log "(${PACKAGE}) Package build failed...skipping"
@@ -368,7 +368,7 @@ remove_package() {
     shell_run rm -rf "${BUILDDIR}/${rm_package}"
     shell_run rm -rf "${BUILDDIR}/.cache/${rm_package}"
     shell_run rm -rf "${BUILDDIR}/.cache/${rm_package}${PKGEXT}"
-    shell_run find "${PACKAGEDIR}" -type f -name "${rm_package}*${PKGEXT}" -delete
+    shell_run find "${PACKAGEDIR}" -type f -name "${rm_package}-*${PKGEXT}" -delete
 
     (
         echo "REPONAME=${REPONAME}"
