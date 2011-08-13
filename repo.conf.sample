@@ -1,0 +1,8 @@
+REPONAME=myrepo
+GET_FROM_AUR=(
+    python-async=m
+    python-gitdb=m
+    gitpython=m
+    python2-legit-git=m
+    python2-clint-git=m
+)
