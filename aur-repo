@@ -168,9 +168,10 @@ get_data() {
 
 show_help() {
 cat << EOF
-Usage: $(basename ${0}) [-n] [command] [options]
+Usage: $(basename ${0}) [-n] [-v] [command] [options]
 
   -n : Dry run. Show executed commands but don't run them.
+  -v : Show version.
 
 Commands:
   update                    Update the whole repository.
