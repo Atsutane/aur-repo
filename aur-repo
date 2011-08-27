@@ -13,7 +13,13 @@ AURURL="http://aur.archlinux.org/packages"
 REBUILD=0
 AURGET="aurget"
 DBEXT=".db.tar.gz"
-PKGEXT=".pkg.tar.gz"
+
+if [ ! `grep PKGEXT ~/.makepkg.conf` = "" ]; then
+	PKGEXT=`grep PKGEXT ~/.makepkg.conf |sed s/PKGEXT=// | sed s/\'//g`
+else
+	PKGEXT=`grep PKGEXT /etc/makepkg.conf |sed s/PKGEXT=// | sed s/\'//g`
+fi
+
 
 BUILDDIR="${BUILDDIR:-/build}"
 PACKAGEDIR="${PACKAGEDIR:-/packages}"
@@ -228,12 +234,6 @@ setup() {
 
     if [ ! -d "${BUILDDIR}/.cache" ]; then
         mkdir "${BUILDDIR}/.cache"
-    fi
-
-    # Include makepkg.conf for PKGEXT
-    source /etc/makepkg.conf
-    if [ "${PKGEXT}" = "" ]; then
-        PKGEXT=".pkg.tar.gz"
     fi
 }
 
